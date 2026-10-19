@@ -9,7 +9,7 @@ import termios
 import time
 from unittest.mock import patch
 
-from tests.support import WorkspaceCase, ARTIFACTS, FAST
+from tests.support import WorkspaceCase, RUNTIME, FAST
 from butler.client import discover, pick, run_session
 from butler.config import Settings
 from butler.errors import ButlerError
@@ -53,8 +53,8 @@ class PickerTests(WorkspaceCase):
 class ClientSessionTests(WorkspaceCase):
     def run_with(self, env):
         with patch.dict(os.environ, env, clear=True):
-            run_session(Settings("example-host"), str(self.work), runtime_root=ARTIFACTS,
-                        remote_runtime_root=ARTIFACTS, timings=FAST)
+            run_session(Settings("example-host"), str(self.work), runtime_root=RUNTIME,
+                        remote_runtime_root=RUNTIME, timings=FAST)
 
     def assert_resources_removed(self, env):
         for event in self.events(env):
@@ -125,10 +125,10 @@ class ClientSessionTests(WorkspaceCase):
     def test_forwarding_failure_removes_local_directory(self):
         env = self.fake_environment()
         env["TEST_SSH_MODE"] = "forward_failure"
-        before = set(ARTIFACTS.glob("butler-client-*"))
+        before = set(RUNTIME.glob("butler-client-*"))
         with self.assertRaises(ButlerError):
             self.run_with(env)
-        self.assertEqual(set(ARTIFACTS.glob("butler-client-*")), before)
+        self.assertEqual(set(RUNTIME.glob("butler-client-*")), before)
 
     def start_terminal_session(self, env):
         code = """
@@ -138,11 +138,11 @@ from butler.client import run_session
 from butler.config import Settings
 from butler.errors import Interrupted
 from butler.runtime import terminal_state, signal_handlers
-from tests.support import FAST, ARTIFACTS
+from tests.support import FAST, RUNTIME
 try:
     with signal_handlers(), terminal_state():
-        run_session(Settings('example-host'), os.environ['TEST_PROJECT'], runtime_root=ARTIFACTS,
-                    remote_runtime_root=ARTIFACTS, timings=FAST)
+        run_session(Settings('example-host'), os.environ['TEST_PROJECT'], runtime_root=RUNTIME,
+                    remote_runtime_root=RUNTIME, timings=FAST)
 except Interrupted as exc:
     raise SystemExit(128 + exc.signum)
 """

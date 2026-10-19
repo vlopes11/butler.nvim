@@ -1,8 +1,9 @@
 # Butler
 
 Butler opens a local Neovim UI for a temporary headless Neovim session on a Linux
-server. Pick a remote project with local fzf, edit through an SSH Unix socket
-forward, and close the UI to stop the session and remove its sockets.
+server. Pick a remote project with local fzf or create a new Git repository, edit
+through an SSH Unix socket forward, and close the UI to stop the session and
+remove its sockets.
 
 There is no Butler daemon. Each invocation owns its SSH processes, a remote
 supervisor, and a headless editor. Independent invocations can run concurrently.
@@ -17,9 +18,11 @@ uv tool install .
 python3 -m pip install .
 ```
 
-The client also needs OpenSSH, fzf with `--read0` / `--print0`, and Neovim with
-`--remote-ui`. The server needs OpenSSH server, **Python 3.11 or newer** with its
-standard library, and Neovim with `--headless`, `--listen`, and remote RPC support.
+The client also needs OpenSSH and Neovim with `--remote-ui`. The `connect` command
+additionally needs local fzf with `--read0` / `--print0`; `create` skips the picker.
+The server needs OpenSSH server, **Python 3.11 or newer** with its standard library,
+and Neovim with `--headless`, `--listen`, and remote RPC support. The `create`
+command also requires Git on the server's noninteractive SSH PATH.
 Compatible Neovim versions are required; using the same version on both machines
 avoids UI protocol differences.
 
@@ -89,6 +92,31 @@ Neovim in that directory. Esc cancels without starting an editor. No matches are
 reported as an error. The headless editor loads the server user's normal Neovim
 configuration, so plugins, language servers, and filesystem access run remotely.
 
+To create a new remote project and open it directly:
+
+```sh
+butler create '~/dev/vlopes11/foo'
+butler create '~/dev/vlopes11/foo' work
+butler create '/srv/projects/foo' --host my-server --config ./profiles.toml
+```
+
+`create PATH [PROFILE]` accepts the complete destination as an absolute path or
+a quoted `~/` path, expanded on the server. It uses the same profile selection,
+`--host`, and `--config` options as `connect`. Profile search root and depth do
+not affect creation; `create` does not accept `--root` or `--depth`.
+
+Missing parents are created. An existing destination, including an empty
+directory, file, or symlink, is rejected without changing it. Butler runs
+`git init` in the new directory using the remote user's Git defaults, including
+the initial branch, then opens Neovim there. It creates no commit or Git remote.
+
+If Git initialization fails, times out after 30 seconds, or is interrupted,
+Butler removes the newly created destination and partial Git files, leaving any
+new parent directories. Cleanup failures are reported with the affected path.
+Once Git succeeds, the repository is kept even if the editor fails or the
+session is interrupted. Closing Neovim removes only the temporary session
+resources, just as with `connect`.
+
 SSH aliases, users, identities, ports, jump hosts, authentication, and host-key
 checking come from your normal SSH configuration. SSH may prompt in your terminal
 before the editor starts. Butler disables connection sharing and persistence for
@@ -111,6 +139,9 @@ its own connections and does not close unrelated SSH masters.
    `nvim --server LOCAL_SOCKET --remote-ui` in your terminal.
 6. On UI exit, Butler requests shutdown, waits for remote cleanup, terminates its
    remaining SSH process, and removes the local socket and directory.
+
+`create` skips discovery and selection (steps 1–2). The same remote supervisor
+creates the destination and initializes Git before starting Neovim in step 4.
 
 Both directories have mode `0700`; socket access is restricted to their owner.
 Existing session directories are never reused or removed. No TCP listeners are
@@ -140,8 +171,8 @@ configuration/argument errors, and `128 + signal` for an interrupted supervisor.
 
 ## Development and tests
 
-There are no third-party runtime Python dependencies. With Python 3.11+, `just`, and `uv`
-installed, run the CI checks with:
+There are no third-party runtime Python dependencies. With Python 3.11+, Git,
+`just`, and `uv` installed, run the CI checks with:
 
 ```sh
 just check
@@ -166,9 +197,13 @@ tools and allow it to run in sandboxes that forbid socket binding. The SSH fixtu
 executes the real bundled Python helper without importing the remote helper from
 the checkout. Tests also verify startup with no remote Butler executable and
 with Python environment variables pointing to unusable package locations.
-Fixtures and test runtime directories stay under `.test-artifacts/` in the
-checkout. The optional SSH test below exercises real Neovim and Unix socket
-forwarding.
+Creation tests use real Git for successful initialization and a Git fixture for
+failure, timeout, and interruption cases. Test projects stay under
+`.test-artifacts/` in the checkout. Session sockets use a separate temporary
+directory shared by the test subprocesses and removed when the suite exits, so
+long checkout paths do not exceed the Unix socket path limit. In a restricted
+environment, set `TMPDIR` to a short, writable temporary directory.
+The optional SSH test below exercises real Neovim and Unix socket forwarding.
 
 To run the optional test through actual SSH, use a dedicated test host with
 Python 3.11+ and Neovim, preferably with Butler absent. Make sure noninteractive

@@ -10,7 +10,7 @@ import sys
 import time
 import unittest
 
-from tests.support import ARTIFACTS, ROOT, UNIX_BIND_AVAILABLE, WorkspaceCase
+from tests.support import RUNTIME, ROOT, UNIX_BIND_AVAILABLE, WorkspaceCase
 from butler.client import discover
 from butler.config import Settings
 
@@ -39,15 +39,15 @@ from butler.client import run_session
 from butler.config import Settings
 from butler.runtime import signal_handlers, terminal_state
 from butler.errors import Interrupted
-from tests.support import ARTIFACTS
+from tests.support import RUNTIME
 try:
     with signal_handlers(), terminal_state():
         run_session(Settings(os.environ['BUTLER_TEST_SSH_HOST']),
-                    os.environ['TEST_SELECTED_DIRECTORY'], runtime_root=ARTIFACTS)
+                    os.environ['TEST_SELECTED_DIRECTORY'], runtime_root=RUNTIME)
 except Interrupted as exc:
     raise SystemExit(128 + exc.signum)
 """
-        existing = set(ARTIFACTS.glob("butler-client-*"))
+        existing = set(RUNTIME.glob("butler-client-*"))
         master, slave = pty.openpty()
         self.addCleanup(os.close, master)
         self.addCleanup(os.close, slave)
@@ -65,7 +65,7 @@ except Interrupted as exc:
         attached = False
         while time.monotonic() < deadline and child.poll() is None:
             drain()
-            candidates = set(ARTIFACTS.glob("butler-client-*")) - existing
+            candidates = set(RUNTIME.glob("butler-client-*")) - existing
             if candidates:
                 local = next(iter(candidates))
                 try:

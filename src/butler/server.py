@@ -8,7 +8,7 @@ import sys
 import time
 from typing import BinaryIO, Callable
 
-from .config import validate_values
+from .config import validate_remote_path, validate_values
 from .errors import ButlerError, ConfigError, Interrupted
 from .protocol import Reader, read_request, send
 from .runtime import RUNTIME_ROOT, SessionPaths, Timings, cleanup_signals, signal_handlers, terminate
@@ -76,16 +76,64 @@ def list_directories(source: BinaryIO, output: BinaryIO) -> None:
     send(output, "done")
 
 
+def create_repository(directory: str, *, timings: Timings = Timings()) -> str:
+    validate_remote_path(directory, "Destination")
+    destination = Path(os.path.abspath(os.path.expanduser(directory)))
+    if shutil.which("git") is None:
+        raise ButlerError("git is not installed on the server's noninteractive SSH PATH")
+    try:
+        destination.mkdir(parents=True)
+    except FileExistsError:
+        raise ButlerError(f"Destination already exists: {destination}") from None
+    except OSError as exc:
+        raise ButlerError(f"Cannot create destination {destination}: {exc}") from None
+
+    process = None
+    initialized = False
+    try:
+        process = subprocess.Popen(
+            ["git", "init"], cwd=destination, stdin=subprocess.DEVNULL,
+            stdout=sys.stderr, stderr=sys.stderr, start_new_session=True,
+        )
+        try:
+            status = process.wait(timeout=timings.startup)
+        except subprocess.TimeoutExpired:
+            raise ButlerError(f"git init timed out after {timings.startup:g}s for {destination}") from None
+        if status:
+            raise ButlerError(f"git init failed for {destination} (exit {status})")
+        initialized = True
+    except OSError as exc:
+        raise ButlerError(f"Cannot initialize Git repository {destination}: {exc}") from None
+    finally:
+        with cleanup_signals():
+            try:
+                terminate(process, timings.shutdown, group=True)
+            finally:
+                if not initialized:
+                    try:
+                        shutil.rmtree(destination)
+                    except OSError as exc:
+                        print(f"butler: Cannot remove failed destination {destination}: {exc}", file=sys.stderr)
+    return str(destination)
+
+
 def serve(source: BinaryIO, output: BinaryIO, *, runtime_root: Path = RUNTIME_ROOT,
           timings: Timings = Timings()) -> None:
     request = read_request(source, "start")
     paths = SessionPaths(request.get("session"), "server", runtime_root)
     directory = request.get("directory")
-    if (not isinstance(directory, str) or "\0" in directory
+    create = request.get("create", False)
+    if type(create) is not bool:
+        raise ButlerError("The create option must be a boolean")
+    if create:
+        validate_remote_path(directory, "Destination")
+    elif (not isinstance(directory, str) or "\0" in directory
             or not os.path.isabs(directory) or not os.path.isdir(directory)):
         raise ButlerError(f"Selected remote directory no longer exists or is invalid: {directory!r}")
     if shutil.which("nvim") is None:
         raise ButlerError("nvim is not installed on the server's noninteractive SSH PATH")
+    if create:
+        directory = create_repository(directory, timings=timings)
     child = None
     reason = "stop"
     returncode = None

@@ -159,7 +159,7 @@ def signal_handlers():
 @contextmanager
 def terminal_state():
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        raise ButlerError("Run 'butler connect' in an interactive terminal")
+        raise ButlerError("Run Butler in an interactive terminal")
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
     try:

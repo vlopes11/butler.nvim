@@ -24,10 +24,5 @@ jobs:
 
       - uses: extractions/setup-just@v4
 
-      # Test sockets live under the checkout and must fit Linux's 108-byte limit.
-      - name: Prepare a short checkout path
-        run: cp -a "$GITHUB_WORKSPACE" "$RUNNER_TEMP/butler"
-
       - name: Run checks
-        working-directory: ${{ runner.temp }}/butler
         run: just check

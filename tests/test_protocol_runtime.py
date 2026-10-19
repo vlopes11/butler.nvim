@@ -3,7 +3,7 @@ import os
 import stat
 import uuid
 
-from tests.support import WorkspaceCase, ARTIFACTS
+from tests.support import WorkspaceCase, RUNTIME
 from butler.errors import ButlerError
 from butler.protocol import Reader, decode, encode, read_request
 from butler.runtime import SessionPaths
@@ -44,7 +44,7 @@ class ProtocolTests(WorkspaceCase):
 
 class ResourceTests(WorkspaceCase):
     def test_private_directory_and_repeatable_cleanup(self):
-        paths = SessionPaths(uuid.uuid4().hex, "client", ARTIFACTS)
+        paths = SessionPaths(uuid.uuid4().hex, "client", RUNTIME)
         paths.create()
         self.addCleanup(paths.cleanup)
         self.assertEqual(stat.S_IMODE(paths.directory.stat().st_mode), 0o700)
@@ -52,7 +52,7 @@ class ResourceTests(WorkspaceCase):
         self.assertEqual(paths.cleanup(), [])
 
     def test_existing_directory_is_not_owned_or_deleted(self):
-        paths = SessionPaths(uuid.uuid4().hex, "server", ARTIFACTS)
+        paths = SessionPaths(uuid.uuid4().hex, "server", RUNTIME)
         paths.directory.mkdir()
         sentinel = paths.directory / "keep"
         sentinel.touch()
@@ -66,6 +66,6 @@ class ResourceTests(WorkspaceCase):
     def test_session_id_and_path_length_validation(self):
         for session in (None, "../escape", "z" * 32):
             with self.assertRaises(ButlerError):
-                SessionPaths(session, "server", ARTIFACTS)
+                SessionPaths(session, "server", RUNTIME)
         with self.assertRaisesRegex(ButlerError, "path limit"):
             SessionPaths("f" * 32, "server", self.work / ("a" * 108))

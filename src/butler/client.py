@@ -8,7 +8,7 @@ import sys
 import time
 import uuid
 
-from .config import Settings
+from .config import Settings, validate_remote_path
 from .errors import ButlerError
 from .runtime import RUNTIME_ROOT, SessionPaths, Timings, cleanup_signals, terminal_state, terminate
 from .ssh import Connection
@@ -86,7 +86,7 @@ def probe(socket: Path, timeout: float) -> tuple[bool, str]:
 
 def run_session(settings: Settings, directory: str, *, runtime_root: Path = RUNTIME_ROOT,
                 remote_runtime_root: Path = RUNTIME_ROOT,
-                timings: Timings = Timings()) -> None:
+                timings: Timings = Timings(), create: bool = False) -> None:
     session = uuid.uuid4().hex
     local = SessionPaths(session, "client", runtime_root)
     remote = SessionPaths(session, "server", remote_runtime_root)
@@ -97,7 +97,10 @@ def run_session(settings: Settings, directory: str, *, runtime_root: Path = RUNT
         local.create()
         connection = Connection(settings.host, "serve", (local.socket, remote.socket),
                                 runtime_root=remote_runtime_root, timings=timings)
-        connection.send("start", session=session, directory=directory)
+        request = {"session": session, "directory": directory}
+        if create:
+            request["create"] = True
+        connection.send("start", **request)
         handshake_deadline = time.monotonic() + timings.handshake
         startup_deadline = None
         next_heartbeat = time.monotonic()
@@ -192,3 +195,12 @@ def connect(settings: Settings) -> None:
         directory = pick(paths, settings.host)
         if directory is not None:
             run_session(settings, directory)
+
+
+def create(settings: Settings, directory: str) -> None:
+    validate_remote_path(directory, "Destination")
+    with terminal_state():
+        for executable in ("ssh", "nvim"):
+            if shutil.which(executable) is None:
+                raise ButlerError(f"Required client executable is missing: {executable}")
+        run_session(settings, directory, create=True)
