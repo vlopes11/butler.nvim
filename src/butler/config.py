@@ -17,6 +17,12 @@ class Settings:
     depth: int = 2
 
 
+def validate_remote_path(path: str, label: str) -> None:
+    if (not isinstance(path, str) or "\0" in path
+            or not (path.startswith("/") or path == "~" or path.startswith("~/"))):
+        raise ConfigError(f"{label} must be an absolute path or start with ~/")
+
+
 def validate_values(values: dict, label: str) -> None:
     unknown = values.keys() - {"host", "root", "depth"}
     if unknown:
@@ -27,10 +33,7 @@ def validate_values(values: dict, label: str) -> None:
                 or any(c.isspace() or ord(c) < 32 for c in host)):
             raise ConfigError(f"{label}: host must be an SSH destination or alias")
     if "root" in values:
-        root = values["root"]
-        if (not isinstance(root, str) or "\0" in root
-                or not (root.startswith("/") or root == "~" or root.startswith("~/"))):
-            raise ConfigError(f"{label}: root must be an absolute path or start with ~/")
+        validate_remote_path(values["root"], f"{label}: root")
     if "depth" in values:
         depth = values["depth"]
         if type(depth) is not int or depth < 0:

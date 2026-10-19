@@ -1,3 +1,4 @@
+import atexit
 import json
 import os
 from pathlib import Path
@@ -16,12 +17,19 @@ from butler.runtime import Timings, terminate
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = ROOT / ".test-artifacts"
 
+# Socket paths must stay short regardless of the checkout location. Only the
+# parent test process owns this directory; subprocesses inherit its path.
+if "BUTLER_TEST_RUNTIME_ROOT" not in os.environ:
+    _runtime = tempfile.TemporaryDirectory(prefix="butler-test-")
+    atexit.register(_runtime.cleanup)
+    os.environ["BUTLER_TEST_RUNTIME_ROOT"] = _runtime.name
+RUNTIME = Path(os.environ["BUTLER_TEST_RUNTIME_ROOT"])
+
 FAST = Timings(heartbeat=0.1, lease=2, startup=2, handshake=2, shutdown=0.2, probe=0.2, poll=0.02)
 
 
 def socket_binding_available():
-    ARTIFACTS.mkdir(exist_ok=True)
-    probe = ARTIFACTS / f"bind-{os.getpid()}"
+    probe = RUNTIME / f"bind-{os.getpid()}"
     with socket.socket(socket.AF_UNIX) as listener:
         try:
             listener.bind(str(probe))
@@ -79,7 +87,7 @@ class WorkspaceCase(unittest.TestCase):
     def launch_server(self, env=None):
         self.active_env = dict(env or self.environment())
         self.active_env.pop("PYTHONPATH", None)
-        command = remote_command("serve", runtime_root=ARTIFACTS, timings=FAST)
+        command = remote_command("serve", runtime_root=RUNTIME, timings=FAST)
         proc = subprocess.Popen(["/bin/sh", "-c", command], cwd=self.work,
                                 env=self.active_env, stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)

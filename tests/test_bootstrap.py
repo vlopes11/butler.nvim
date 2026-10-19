@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from butler.bootstrap import remote_command
 from butler.protocol import decode, encode
-from tests.support import ARTIFACTS, FAST, WorkspaceCase
+from tests.support import RUNTIME, FAST, WorkspaceCase
 
 
 class BootstrapTests(WorkspaceCase):
@@ -26,7 +26,7 @@ class BootstrapTests(WorkspaceCase):
             (self.work / name).write_text("raise RuntimeError('imported remote environment')\n")
 
     def run_helper(self, action, request):
-        command = remote_command(action, runtime_root=ARTIFACTS, timings=FAST)
+        command = remote_command(action, runtime_root=RUNTIME, timings=FAST)
         return subprocess.run(["/bin/sh", "-c", command], input=request, cwd=self.work,
                               env=self.env, capture_output=True, timeout=5)
 
@@ -48,7 +48,7 @@ class BootstrapTests(WorkspaceCase):
         error = decode(result.stdout)
         self.assertEqual(error["type"], "error")
         self.assertIn("nvim", error["message"])
-        self.assertFalse((ARTIFACTS / f"butler-server-{session}").exists())
+        self.assertFalse((RUNTIME / f"butler-server-{session}").exists())
 
     def test_unsupported_python_reports_version_requirement(self):
         self.python.unlink()

@@ -2,7 +2,7 @@ import os
 import signal
 import uuid
 
-from tests.support import WorkspaceCase, ARTIFACTS
+from tests.support import WorkspaceCase, RUNTIME
 from butler.protocol import Reader, send
 from butler.runtime import SessionPaths
 
@@ -10,7 +10,7 @@ from butler.runtime import SessionPaths
 class ServerTests(WorkspaceCase):
     def start(self, env=None):
         session = uuid.uuid4().hex
-        paths = SessionPaths(session, "server", ARTIFACTS)
+        paths = SessionPaths(session, "server", RUNTIME)
         proc = self.launch_server(env or self.fake_environment())
         reader = Reader(proc.stdout)
         send(proc.stdin, "start", session=session, directory=str(self.work))
