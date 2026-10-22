@@ -36,13 +36,15 @@ host = "work-host"
             with self.subTest(arguments=arguments), patch("butler.cli.create") as action:
                 self.assertEqual(main(["create", "~/dev/foo", *arguments,
                                        "--config", str(self.config)]), 0)
-                action.assert_called_once_with(Settings(host, "~/ignored", 5), "~/dev/foo")
+                action.assert_called_once_with(Settings(host, "~/ignored", 5), "~/dev/foo",
+                                               nvim="nvim", remote_nvim="nvim")
 
     def test_connect_arguments_still_work(self):
         with patch("butler.cli.connect") as action:
             self.assertEqual(main(["connect", "work", "--host", "other", "--root", "~/projects",
                                    "--depth", "0", "--config", str(self.config)]), 0)
-            action.assert_called_once_with(Settings("other", "~/projects", 0))
+            action.assert_called_once_with(Settings("other", "~/projects", 0),
+                                           nvim="nvim", remote_nvim="nvim")
 
     def test_invalid_destinations_fail_before_opening_a_session(self):
         for destination in ("", "relative/foo", "~someone/foo", "/invalid\0path"):
@@ -127,7 +129,8 @@ class CreateRepositoryTests(WorkspaceCase):
             with self.subTest(missing=missing):
                 status, messages, stderr = self.helper_request(create=True)
                 self.assertEqual(status, 1, stderr)
-                self.assertIn(f"{missing} is not installed", messages[0]["message"])
+                expected = "Remote Neovim executable is missing" if missing == "nvim" else "git is not installed"
+                self.assertIn(expected, messages[0]["message"])
                 self.assertFalse(self.destination.parent.exists())
         self.assert_no_editor()
 

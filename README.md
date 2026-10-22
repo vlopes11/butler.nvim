@@ -30,15 +30,16 @@ Butler supplies its remote helper through the SSH command and runs it in memory.
 There is no remote package installation, uploaded script file, or helper cache.
 An existing remote Butler installation is ignored and may be removed.
 
-Ensure `python3` and `nvim` are on the server's **noninteractive SSH PATH**:
+Ensure `python3` and, by default, `nvim` are on the server's **noninteractive SSH PATH**:
 
 ```sh
 ssh remote-host 'python3 --version; command -v nvim'
 ```
 
-If Python or Neovim is installed in a user directory (such as `~/.local/bin`),
-add that directory to the PATH initialized by the remote shell for noninteractive
-commands. The remote shell's startup files must not print banners to stdout,
+If Python is installed in a user directory (such as `~/.local/bin`), add that
+directory to the PATH initialized by the remote shell for noninteractive commands.
+For Neovim, either update that PATH or select its executable with `--remote-nvim`.
+The remote shell's startup files must not print banners to stdout,
 which carries Butler's control protocol.
 
 The SSH server must allow local stream-local forwarding, for example
@@ -73,6 +74,7 @@ butler connect work
 butler connect work --depth 3
 butler connect --host remote-host --root '~/dev' --depth 2
 butler connect --config ./profiles.toml
+butler connect --nvim /opt/neovim/bin/nvim --remote-nvim '~/.local/bin/nvim'
 ```
 
 No profile selects `default`. Named profiles inherit missing settings from
@@ -80,6 +82,20 @@ No profile selects `default`. Named profiles inherit missing settings from
 built-in defaults are host `remote-host`, root `~/dev`, and depth `2`. The default
 configuration file is optional. Define `remote-host` as an alias in your SSH
 configuration, or override it with a profile's `host` setting or `--host`.
+
+Both `connect` and `create` accept `--nvim EXECUTABLE` for the local UI and
+readiness checks, and `--remote-nvim EXECUTABLE` for the remote headless editor.
+Each defaults independently to `nvim` on that machine's PATH. These options are
+CLI-only and are not profile settings.
+
+An executable can be a command name on PATH, an absolute path, a relative path
+containing `/`, or a `~/` path. Local paths resolve from the client's current
+directory and home; remote paths resolve from the SSH helper's initial directory
+and the server user's home, before entering the selected project. Quote remote
+`~` paths to prevent your local shell from expanding them. Paths with spaces or
+shell characters are passed literally as one executable; additional Neovim
+arguments are not accepted. An invalid override reports an error without falling
+back to `nvim`.
 
 Depth is **exact**, relative to the root. At depth 2, `~/dev/vlopes11/butler`
 appears but `~/dev/vlopes11` does not. Depth 0 offers the root itself. Hidden
@@ -98,12 +114,14 @@ To create a new remote project and open it directly:
 butler create '~/dev/vlopes11/foo'
 butler create '~/dev/vlopes11/foo' work
 butler create '/srv/projects/foo' --host my-server --config ./profiles.toml
+butler create '~/dev/vlopes11/foo' --remote-nvim /opt/neovim/bin/nvim
 ```
 
 `create PATH [PROFILE]` accepts the complete destination as an absolute path or
 a quoted `~/` path, expanded on the server. It uses the same profile selection,
-`--host`, and `--config` options as `connect`. Profile search root and depth do
-not affect creation; `create` does not accept `--root` or `--depth`.
+`--host`, `--config`, `--nvim`, and `--remote-nvim` options as `connect`. Profile
+search root and depth do not affect creation; `create` does not accept `--root`
+or `--depth`.
 
 Missing parents are created. An existing destination, including an empty
 directory, file, or symlink, is rejected without changing it. Butler runs

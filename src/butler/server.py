@@ -11,7 +11,9 @@ from typing import BinaryIO, Callable
 from .config import validate_remote_path, validate_values
 from .errors import ButlerError, ConfigError, Interrupted
 from .protocol import Reader, read_request, send
-from .runtime import RUNTIME_ROOT, SessionPaths, Timings, cleanup_signals, signal_handlers, terminate
+from .runtime import (
+    RUNTIME_ROOT, SessionPaths, Timings, cleanup_signals, resolve_executable, signal_handlers, terminate,
+)
 
 
 def main(action: str, *, runtime_root: Path = RUNTIME_ROOT,
@@ -130,8 +132,7 @@ def serve(source: BinaryIO, output: BinaryIO, *, runtime_root: Path = RUNTIME_RO
     elif (not isinstance(directory, str) or "\0" in directory
             or not os.path.isabs(directory) or not os.path.isdir(directory)):
         raise ButlerError(f"Selected remote directory no longer exists or is invalid: {directory!r}")
-    if shutil.which("nvim") is None:
-        raise ButlerError("nvim is not installed on the server's noninteractive SSH PATH")
+    nvim = resolve_executable(request.get("nvim", "nvim"), "Remote Neovim")
     if create:
         directory = create_repository(directory, timings=timings)
     child = None
@@ -142,7 +143,7 @@ def serve(source: BinaryIO, output: BinaryIO, *, runtime_root: Path = RUNTIME_RO
     try:
         paths.create()
         child = subprocess.Popen(
-            ["nvim", "--headless", "--listen", str(paths.socket)],
+            [nvim, "--headless", "--listen", str(paths.socket)],
             cwd=directory, stdin=subprocess.DEVNULL, stdout=sys.stderr,
             stderr=sys.stderr, start_new_session=True,
         )

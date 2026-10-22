@@ -22,6 +22,10 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("profile", nargs="?", help="Profile name (default: default)")
         command.add_argument("--host", help=f"Override the SSH destination or alias (built-in default: {DEFAULT_HOST})")
         command.add_argument("--config", type=Path, help="Read profiles from this TOML file")
+        command.add_argument("--nvim", metavar="EXECUTABLE", default="nvim",
+                             help="Local Neovim executable for the UI and readiness checks (default: nvim on PATH)")
+        command.add_argument("--remote-nvim", metavar="EXECUTABLE", default="nvim",
+                             help="Remote Neovim executable (default: nvim on remote PATH); quote '~' to expand it remotely")
     return cli
 
 
@@ -32,9 +36,9 @@ def main(argv: list[str] | None = None) -> int:
             settings = load_settings(args.profile, args.config, host=args.host,
                                      root=getattr(args, "root", None), depth=getattr(args, "depth", None))
             if args.command == "create":
-                create(settings, args.path)
+                create(settings, args.path, nvim=args.nvim, remote_nvim=args.remote_nvim)
             else:
-                connect(settings)
+                connect(settings, nvim=args.nvim, remote_nvim=args.remote_nvim)
     except Interrupted as exc:
         return 128 + exc.signum
     except (ButlerError, OSError) as exc:

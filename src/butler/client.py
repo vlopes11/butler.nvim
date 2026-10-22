@@ -10,7 +10,9 @@ import uuid
 
 from .config import Settings, validate_remote_path
 from .errors import ButlerError
-from .runtime import RUNTIME_ROOT, SessionPaths, Timings, cleanup_signals, terminal_state, terminate
+from .runtime import (
+    RUNTIME_ROOT, SessionPaths, Timings, cleanup_signals, resolve_executable, terminal_state, terminate,
+)
 from .ssh import Connection
 
 
@@ -71,10 +73,10 @@ def pick(paths: list[str], host: str) -> str | None:
     return chosen
 
 
-def probe(socket: Path, timeout: float) -> tuple[bool, str]:
+def probe(socket: Path, timeout: float, *, nvim: str = "nvim") -> tuple[bool, str]:
     try:
         result = subprocess.run(
-            ["nvim", "--server", str(socket), "--remote-expr", "1"],
+            [nvim, "--server", str(socket), "--remote-expr", "1"],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             timeout=timeout,
         )
@@ -86,7 +88,9 @@ def probe(socket: Path, timeout: float) -> tuple[bool, str]:
 
 def run_session(settings: Settings, directory: str, *, runtime_root: Path = RUNTIME_ROOT,
                 remote_runtime_root: Path = RUNTIME_ROOT,
-                timings: Timings = Timings(), create: bool = False) -> None:
+                timings: Timings = Timings(), create: bool = False,
+                nvim: str = "nvim", remote_nvim: str = "nvim") -> None:
+    nvim = resolve_executable(nvim, "Local Neovim")
     session = uuid.uuid4().hex
     local = SessionPaths(session, "client", runtime_root)
     remote = SessionPaths(session, "server", remote_runtime_root)
@@ -97,7 +101,7 @@ def run_session(settings: Settings, directory: str, *, runtime_root: Path = RUNT
         local.create()
         connection = Connection(settings.host, "serve", (local.socket, remote.socket),
                                 runtime_root=remote_runtime_root, timings=timings)
-        request = {"session": session, "directory": directory}
+        request = {"session": session, "directory": directory, "nvim": remote_nvim}
         if create:
             request["create"] = True
         connection.send("start", **request)
@@ -159,10 +163,11 @@ def run_session(settings: Settings, directory: str, *, runtime_root: Path = RUNT
                 if now >= startup_deadline:
                     raise ButlerError(f"Remote Neovim did not become ready within {timings.startup:g}s: {probe_error}")
                 if now >= next_probe and local.socket.exists():
-                    ready, probe_error = probe(local.socket, min(timings.probe, startup_deadline - now))
+                    ready, probe_error = probe(local.socket, min(timings.probe, startup_deadline - now),
+                                               nvim=nvim)
                     next_probe = time.monotonic() + 0.2
                     if ready:
-                        ui = subprocess.Popen(["nvim", "--server", str(local.socket), "--remote-ui"])
+                        ui = subprocess.Popen([nvim, "--server", str(local.socket), "--remote-ui"])
     except (ButlerError, BrokenPipeError) as exc:
         if connection is not None:
             raise connection.error(str(exc)) from None
@@ -186,21 +191,21 @@ def run_session(settings: Settings, directory: str, *, runtime_root: Path = RUNT
                             raise ButlerError("; ".join(cleanup_errors))
 
 
-def connect(settings: Settings) -> None:
+def connect(settings: Settings, *, nvim: str = "nvim", remote_nvim: str = "nvim") -> None:
     with terminal_state():
-        for executable in ("ssh", "fzf", "nvim"):
+        for executable in ("ssh", "fzf"):
             if shutil.which(executable) is None:
                 raise ButlerError(f"Required client executable is missing: {executable}")
+        nvim = resolve_executable(nvim, "Local Neovim")
         paths = discover(settings)
         directory = pick(paths, settings.host)
         if directory is not None:
-            run_session(settings, directory)
+            run_session(settings, directory, nvim=nvim, remote_nvim=remote_nvim)
 
 
-def create(settings: Settings, directory: str) -> None:
+def create(settings: Settings, directory: str, *, nvim: str = "nvim", remote_nvim: str = "nvim") -> None:
     validate_remote_path(directory, "Destination")
     with terminal_state():
-        for executable in ("ssh", "nvim"):
-            if shutil.which(executable) is None:
-                raise ButlerError(f"Required client executable is missing: {executable}")
-        run_session(settings, directory, create=True)
+        if shutil.which("ssh") is None:
+            raise ButlerError("Required client executable is missing: ssh")
+        run_session(settings, directory, create=True, nvim=nvim, remote_nvim=remote_nvim)
