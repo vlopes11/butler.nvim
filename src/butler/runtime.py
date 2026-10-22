@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -12,9 +13,19 @@ import termios
 import threading
 from typing import BinaryIO
 
-from .errors import ButlerError, Interrupted
+from .errors import ButlerError, ConfigError, Interrupted
 
 RUNTIME_ROOT = Path("/tmp")
+
+
+def resolve_executable(executable: str, label: str) -> str:
+    """Resolve on the executing machine, before a subprocess changes directory."""
+    if not isinstance(executable, str) or not executable or "\0" in executable:
+        raise ConfigError(f"{label} executable must be a nonempty string without NUL characters")
+    resolved = shutil.which(os.path.expanduser(executable))
+    if resolved is None:
+        raise ButlerError(f"{label} executable is missing or not executable: {executable!r}")
+    return os.path.abspath(resolved)
 
 
 @dataclass(frozen=True)

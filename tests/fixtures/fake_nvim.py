@@ -9,7 +9,8 @@ import time
 args = sys.argv[1:]
 role = "ui" if "--remote-ui" in args else "server" if "--headless" in args else "probe"
 with open(os.environ["TEST_EVENTS"], "a") as stream:
-    stream.write(json.dumps({"role": role, "pid": os.getpid(), "args": args}) + "\n")
+    stream.write(json.dumps({"role": role, "pid": os.getpid(), "args": args,
+                             "executable": sys.argv[0]}) + "\n")
 real = os.environ["TEST_REAL_NVIM"]
 simulated = os.environ.get("TEST_SIMULATE_RPC")
 if role != "ui":
